@@ -1,0 +1,129 @@
+Assignment: Deploying Aquila MERN Application on Azure 3-Tier Architecture
+
+Step 1: Create Azure Virtual Network (VNet)
+In Azure Portal, navigate to Virtual Networks and create a new VNet with the following configuration:
+Public Subnet: For the Load Balancer.
+Private Subnet 1: For Application Servers.
+Private Subnet 2: For Database Servers.
+This isolates the components into three distinct layers, ensuring enhanced security and segregation of the web, application, and data layers.
+
+Step 2: Create Network Security Groups (NSGs)
+NSG for Application Subnet:
+
+Allow only inbound traffic from the Load Balancer (ports 80 for HTTP and 443 for HTTPS).
+Allow SSH (port 22) from internal trusted IPs for developer access.
+NSG for Database Subnet:
+
+Only allow traffic from the Application Subnet on the MongoDB port (default is 27017).
+NSG for Public Subnet:
+
+Allow inbound traffic on ports 80 and 443.
+Block SSH or any direct public access.
+
+Step 3: Provision Virtual Machines (VMs)
+Application VM:
+
+In Azure Portal, create a Linux VM in the Private Subnet 1 (Application Subnet).
+Ensure it only has a private IP address and install Node.js and React for running the Aquila MERN application.
+Database VM:
+
+In Private Subnet 2 (Database Subnet), create another Linux VM and install MongoDB.
+Alternatively, use Azure CosmosDB with MongoDB API for a managed database solution.
+
+Step 4: Configure Azure Application Gateway (Load Balancer)
+Go to Azure Portal and create an Application Gateway.
+Associate it with the Public Subnet for external-facing traffic.
+Configure backend pools to route traffic to the Application VM in Private Subnet 1.
+Set up routing rules for HTTP/HTTPS.
+The Application Gateway will act as the entry point, hiding the application servers' public IP addresses while routing the traffic.
+
+Step 5: Set up Azure Bastion (Optional)
+For secure management and access, create an Azure Bastion service within the VNet.
+This allows SSH/RDP access to VMs without exposing their private IPs to the internet.
+
+Step 6: Configure Azure Private DNS
+Set up a Private DNS Zone in the Azure VNet to resolve private IP addresses for the Application and Database VMs.
+Add DNS records for both the Application and Database VMs.
+This enables developers and internal users to access the servers using internal DNS names rather than relying on public IPs.
+
+Step 7: GitHub Actions CI/CD Pipeline
+In the Aquila GitHub repository, configure GitHub Actions for automating deployment.
+yaml
+Copy code
+name: Aquila CI/CD
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v2
+      with:
+        node-version: '14'
+
+    - name: Install dependencies
+      run: npm install
+
+    - name: Build and Test Aquila
+      run: npm run build
+
+    - name: Build Docker image
+      run: docker build -t aquila-mern-app .
+
+    - name: Push to ACR
+      run: |
+        az login --service-principal -u ${{ secrets.AZURE_CLIENT_ID }} -p ${{ secrets.AZURE_CLIENT_SECRET }} --tenant ${{ secrets.AZURE_TENANT_ID }}
+        docker login ${{ secrets.ACR_LOGIN_SERVER }} -u ${{ secrets.ACR_USERNAME }} -p ${{ secrets.ACR_PASSWORD }}
+        docker tag aquila-mern-app ${{ secrets.ACR_LOGIN_SERVER }}/aquila-mern-app:latest
+        docker push ${{ secrets.ACR_LOGIN_SERVER }}/aquila-mern-app:latest
+This action performs the following tasks:
+Builds and tests the Aquila application.
+Builds a Docker image and pushes it to Azure Container Registry (ACR).
+
+Step 8: Azure DevOps Deployment
+In Azure DevOps, set up a Release Pipeline to automate deployment:
+
+Stage 1: Pull the Docker image from ACR.
+
+Stage 2: Deploy the Docker image to the Application VM (or Azure Kubernetes Service (AKS) if scaling is needed).
+
+Step 9: Configure Application Settings
+Set up the environment variables for MongoDB connections:
+If using CosmosDB, use the provided connection string in the Aquila application configuration.
+Make sure all communication between the Application and Database layers occurs over private IPs.
+
+Step 10: Test the Deployment
+Access the application via the Azure Application Gateway using its public DNS or IP address:
+Example: http://<application-gateway-ip>/
+
+Verify that internal users and developers can access the Application and Database VMs using private IP addresses or DNS names.
+
+High-Level Design (HLD) Diagram
+scss
+
+                          Internet
+                              |
+                    Azure Application Gateway (Load Balancer)
+                              |
+      ---------------------------------------------------------------
+      |                                                            |
+ Private Subnet 1 (App Servers)                              Private Subnet 2 (Database Servers)
+       [VMs with Node.js, React]                                [Azure CosmosDB / MongoDB VMs]
+      |                                                                      |
+    Internal Traffic (Private IPs)                                Internal Traffic (Private IPs)
+
+
+Access to Aquila Application
+
+The Azure Application Gateway will provide the public-facing access point for the Aquila application. No public IPs of the web or application servers will be exposed directly.
+Example URL: http://<application-gateway-ip>/
+
+
